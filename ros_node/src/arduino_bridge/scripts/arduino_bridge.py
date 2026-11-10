@@ -4,14 +4,16 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 
-PORT = '/dev/ttyACM0'  # Change to your Arduino's port.
+PORT = '/dev/pts/5'  # Change to your Arduino's port.
 BAUD = 115200
 
 
 class ArduinoBridge(Node):
     def __init__(self):
         super().__init__('arduino_bridge')
-        self.serial = serial.Serial(PORT, BAUD, timeout=0)
+        self.declare_parameter('port', PORT)
+        port = self.get_parameter('port').value
+        self.serial = serial.Serial(port, BAUD, timeout=0)
         self.buffer = b''
 
         self.publisher = self.create_publisher(String, '/arduino/data', 10)

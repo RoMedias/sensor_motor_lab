@@ -3,11 +3,14 @@
 <package format="3">
   <name>arduino_bridge</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <description>Arduino serial transport and basic Flask motor control GUI</description>
   <maintainer email="m.aswarthreddy@gmail.com">aswarth</maintainer>
   <license>TODO: License declaration</license>
 
   <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <exec_depend>python3-serial</exec_depend>
+  <exec_depend>python3-flask</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

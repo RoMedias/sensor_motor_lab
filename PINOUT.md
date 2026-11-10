@@ -5,7 +5,7 @@
 | D0, D1 | **Leave empty.** USB serial to the laptop (ROS 2 bridge) | Anything wired here breaks uploads and telemetry |
 | D2 | DC motor encoder **A** | One of only two hardware-interrupt pins (INT0) |
 | D3 | DC motor encoder **B** | The other interrupt pin (INT1); both channels give 4× quadrature counts |
-| D4 | Pushbutton (other leg to GND), `INPUT_PULLUP` | Debounced mode switch; no external resistor needed |
+| D4 | Pushbutton (other leg to GND), `INPUT_PULLUP` | Debounced enable/disable switch; no external resistor needed |
 | D5 | Spare digital sensor (e.g. TSOP IR receiver, ultrasonic) | Free |
 | D6 | L298 **enable** (PWM speed) | Timer0 PWM; still works while the Servo library is in use |
 | D7 | L298 **input 1** (direction) | |
@@ -25,7 +25,7 @@
 - **DC motor:** bench supply (12 V) → L298 motor power. **Stepper:** bench supply → EasyDriver `M+`. **Servo:** a separate 5–6 V supply. Don't power any motor from the Arduino's 5 V pin.
 - **Tie every supply's GND to the Arduino GND.** If you skip this, nothing works reliably.
 - **Encoder:** powered from the Arduino 5 V/GND. Put a 4.7–10 kΩ pull-up from each of A and B to 5 V, as the lab notes require.
-- **EasyDriver:** set the current-limit pot **before** connecting the stepper. MS1/MS2 left unconnected = 1/8 microstepping = 0.225°/step, which is what the bridge's fake board assumes. Stepper wires: A=red, C=blue, B=black, D=green (the datasheet is wrong).
+- **EasyDriver:** set the current-limit pot **before** connecting the stepper. Confirm MS1/MS2 wiring and degrees per pulse with Bill before configuring the GUI; no fake board or step resolution is assumed by the bridge. Stepper wires: A=red, C=blue, B=black, D=green (see the lab guidelines).
 - **Analog dividers:** FSR or thermistor + 10 kΩ fixed resistor between 5 V and GND, with the midpoint going to the A-pin.
 
 ## Paste into the firmware

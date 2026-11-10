@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sensor and motor lab</title>
+  <style>
+    body {
+      font: 16px system-ui;
+      max-width: 850px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+    }
+    fieldset {
+      margin: 1rem 0;
+    }
+    button,
+    input,
+    select {
+      font: inherit;
+      padding: 0.4rem;
+      margin: 0.2rem;
+    }
+    th,
+    td {
+      text-align: left;
+      padding: 0.5rem;
+      border-bottom: 1px solid #ccc;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    output {
+      display: block;
+      min-height: 1.5rem;
+    }
+    .plots {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+    }
+    figure {
+      margin: 0;
+      padding: 0.75rem;
+      border: 1px solid #ccc;
+      border-radius: 0.3rem;
+    }
+    figcaption {
+      font-weight: bold;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 220px;
+    }
+    .legend {
+      font-size: 0.85rem;
+    }
+    .raw {
+      color: #b45309;
+    }
+    .filtered {
+      color: #1d4ed8;
+    }
+    @media (max-width: 650px) {
+      .plots {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+  <h1>Sensor and motor lab</h1>
+  <fieldset>
+    <legend>System</legend>
+    <label
+      >Mode
+      <select id="mode">
+        <option>GUI</option>
+        <option>SENSOR</option>
+      </select></label
+    >
+    <button onclick="send('MODE', document.querySelector('#mode').value)">
+      Set mode
+    </button>
+    <button onclick="send('ENABLE', '1')">Enable motors</button>
+    <button onclick="send('ENABLE', '0')">Disable motors</button>
+    <p id="system">
+      Select a mode and enable state before sending motor commands.
+    </p>
+  </fieldset>
+  <fieldset id="motors" disabled>
+    <legend>GUI motor commands</legend>
+    <form data-command="DC_MOVE">
+      <label
+        >DC relative degrees
+        <input name="value" type="number" step="any" required /></label
+      ><button>Move</button>
+    </form>
+    <form data-command="DC_VEL">
+      <label
+        >DC signed RPM
+        <input name="value" type="number" step="any" required /></label
+      ><button>Set velocity</button>
+    </form>
+    <form data-command="SERVO">
+      <label
+        >Servo absolute degrees
+        <input name="value" type="number" step="any" required /></label
+      ><button>Set angle</button>
+    </form>
+    <form data-command="STEPPER_MOVE">
+      <label
+        >Stepper relative degrees
+        <input name="value" type="number" step="any" required /></label
+      ><button>Move</button>
+    </form>
+    <p id="step-size"></p>
+  </fieldset>
+  <output id="result" role="status"></output>
+  <h2>Sensors</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Sensor</th>
+        <th>Reading</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Potentiometer</td>
+        <td id="pot">Waiting</td>
+      </tr>
+      <tr>
+        <td>Flex</td>
+        <td id="flex">Waiting</td>
+      </tr>
+      <tr>
+        <td>TOF</td>
+        <td id="tof">Waiting</td>
+      </tr>
+      <tr>
+        <td>Slot</td>
+        <td id="slot">Waiting</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    Live graphs: last 60 seconds, sampled by the GUI every 50 ms (20 Hz).
+    Invalid TOF readings leave gaps.
+  </p>
+  <div class="plots">
+    <figure>
+      <figcaption>Potentiometer — angle (°)</figcaption>
+      <canvas
+        id="pot-plot"
+        role="img"
+        aria-label="Potentiometer angle in degrees over time"
+      ></canvas>
+    </figure>
+    <figure>
+      <figcaption>Flex — ADC counts</figcaption>
+      <div class="legend">
+        <span class="raw">Raw</span> · <span class="filtered">Filtered</span>
+      </div>
+      <canvas
+        id="flex-plot"
+        role="img"
+        aria-label="Raw and filtered flex ADC counts over time"
+      ></canvas>
+    </figure>
+    <figure>
+      <figcaption>TOF — distance (mm)</figcaption>
+      <canvas
+        id="tof-plot"
+        role="img"
+        aria-label="TOF distance in millimeters over time"
+      ></canvas>
+    </figure>
+    <figure>
+      <figcaption>Slot — interruption count</figcaption>
+      <canvas
+        id="slot-plot"
+        role="img"
+        aria-label="Slot interruption count over time"
+      ></canvas>
+    </figure>
+  </div>
+  <h2>Last GUI commands</h2>
+  <p>
+    These are requested commands. In SENSOR mode the Arduino controls the motors
+    from sensor readings.
+  </p>
+  <p id="commands">No motor commands sent.</p>
+  <script>
+    const show = (id, text) => (document.getElementById(id).textContent = text);
+    const REFRESH_MS = 50;
+    const samples = [];
+    const plots = [
+      { id: "pot-plot", lines: [["pot", "#1d4ed8"]] },
+      {
+        id: "flex-plot",
+        lines: [
+          ["raw", "#b45309"],
+          ["filtered", "#1d4ed8"],
+        ],
+      },
+      { id: "tof-plot", lines: [["tof", "#1d4ed8"]] },
+      { id: "slot-plot", lines: [["slot", "#1d4ed8"]], stepped: true },
+    ];
+
+    function drawPlots() {
+      const now = performance.now() / 1000;
+      while (samples.length && samples[0].time < now - 60) samples.shift();
+      plots.forEach((plot) => {
+        const canvas = document.getElementById(plot.id);
+        const width = canvas.getBoundingClientRect().width;
+        const height = 220;
+        const scale = window.devicePixelRatio || 1;
+        const pixelWidth = Math.round(width * scale),
+          pixelHeight = Math.round(height * scale);
+        if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+          canvas.width = pixelWidth;
+          canvas.height = pixelHeight;
+        }
+        const ctx = canvas.getContext("2d");
+        ctx.setTransform(scale, 0, 0, scale, 0, 0);
+        ctx.clearRect(0, 0, width, height);
+        const left = 58,
+          top = 16,
+          right = width - 12,
+          bottom = height - 38;
+        const values = [];
+        samples.forEach((sample) =>
+          plot.lines.forEach(([key]) => {
+            if (Number.isFinite(sample[key])) values.push(sample[key]);
+          }),
+        );
+        let min = values.length ? Math.min(...values) : 0;
+        let max = values.length ? Math.max(...values) : 1;
+        const padding = Math.max((max - min) * 0.1, 1);
+        min = min >= 0 ? Math.max(0, min - padding) : min - padding;
+        max += padding;
+        if (plot.stepped) {
+          min = Math.floor(min);
+          max = Math.ceil(max);
+        }
+        const x = (time) => left + ((time - now + 60) / 60) * (right - left);
+        const y = (value) =>
+          bottom - ((value - min) / (max - min)) * (bottom - top);
+        ctx.font = "11px system-ui";
+        for (let tick = 0; tick <= 4; tick++) {
+          const py = top + (tick / 4) * (bottom - top);
+          const value = max - (tick / 4) * (max - min);
+          ctx.strokeStyle = "#e5e7eb";
+          ctx.beginPath();
+          ctx.moveTo(left, py);
+          ctx.lineTo(right, py);
+          ctx.stroke();
+          ctx.fillStyle = "#444";
+          ctx.textAlign = "right";
+          ctx.fillText(Number(value.toFixed(1)), left - 6, py + 4);
+          ctx.textAlign = "center";
+          ctx.fillText(
+            String(-60 + tick * 15),
+            left + (tick / 4) * (right - left),
+            bottom + 17,
+          );
+        }
+        ctx.fillText("Seconds ago", (left + right) / 2, height - 3);
+        if (!values.length)
+          ctx.fillText(
+            "Waiting for valid readings",
+            (left + right) / 2,
+            height / 2,
+          );
+        plot.lines.forEach(([key, color]) => {
+          ctx.strokeStyle = color;
+          ctx.fillStyle = color;
+          ctx.lineWidth = 1.7;
+          ctx.beginPath();
+          let previous = null;
+          samples.forEach((sample) => {
+            if (!Number.isFinite(sample[key])) {
+              previous = null;
+              return;
+            }
+            const px = x(sample.time),
+              py = y(sample[key]);
+            if (previous === null) ctx.moveTo(px, py);
+            else {
+              if (plot.stepped) ctx.lineTo(px, y(previous));
+              ctx.lineTo(px, py);
+            }
+            previous = sample[key];
+          });
+          ctx.stroke();
+          const latest = samples[samples.length - 1];
+          if (latest && Number.isFinite(latest[key])) {
+            ctx.beginPath();
+            ctx.arc(x(latest.time), y(latest[key]), 2, 0, 2 * Math.PI);
+            ctx.fill();
+          }
+        });
+      });
+    }
+    window.addEventListener("resize", drawPlots);
+
+    async function send(command, value) {
+      try {
+        const response = await fetch("/command", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ command, value }),
+        });
+        const data = await response.json();
+        show("result", data.error || `Published ${data.sent}`);
+      } catch (error) {
+        show("result", `GUI request failed: ${error.message}`);
+      }
+    }
+    document.querySelectorAll("form").forEach((form) =>
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        send(form.dataset.command, form.elements.value.value);
+      }),
+    );
+    async function refresh() {
+      const started = performance.now();
+      try {
+        const response = await fetch("/state");
+        const s = await response.json();
+        show(
+          "system",
+          `Requested mode: ${s.mode === null ? "unknown" : s.mode}; enable: ${s.enabled === null ? "unknown" : s.enabled ? "enabled" : "disabled"} (also updated by physical button)`,
+        );
+        document.getElementById("motors").disabled =
+          s.mode !== "GUI" || s.enabled !== true;
+        const stepForm = document.querySelector(
+          '[data-command="STEPPER_MOVE"]',
+        );
+        stepForm
+          .querySelectorAll("input, button")
+          .forEach((el) => (el.disabled = s.step_degrees === null));
+        show(
+          "step-size",
+          s.step_degrees === null
+            ? "Stepper unavailable: configure confirmed degrees per step."
+            : `Stepper resolution: ${s.step_degrees}° per pulse. Commands round to the nearest step.`,
+        );
+        if (s.pot) show("pot", `${s.pot.angle_deg}°; raw ${s.pot.raw_adc} ADC`);
+        if (s.flex)
+          show(
+            "flex",
+            `${s.flex.angle_deg}° bend; raw ${s.flex.raw_adc} ADC; filtered ${s.flex.filtered_adc} ADC`,
+          );
+        if (s.tof_mm !== null)
+          show(
+            "tof",
+            s.tof_mm < 0 ? "Invalid / unavailable" : `${s.tof_mm} mm`,
+          );
+        if (s.slot)
+          show(
+            "slot",
+            `${s.slot.blocked ? "Blocked" : "Open"}; ${s.slot.count} interruptions`,
+          );
+        samples.push({
+          time: performance.now() / 1000,
+          pot: s.pot ? s.pot.angle_deg : null,
+          raw: s.flex ? s.flex.raw_adc : null,
+          filtered: s.flex ? s.flex.filtered_adc : null,
+          tof: s.tof_mm !== null && s.tof_mm >= 0 ? s.tof_mm : null,
+          slot: s.slot ? s.slot.count : null,
+        });
+        drawPlots();
+        const commands = [];
+        if (s.dc_command)
+          commands.push(
+            `${s.dc_command.command}: ${s.dc_command.value} ${s.dc_command.command === "DC_VEL" ? "RPM" : "relative degrees"}`,
+          );
+        if (s.servo_command)
+          commands.push(`Servo requested: ${s.servo_command.value}°`);
+        if (s.stepper_command)
+          commands.push(
+            `Stepper achievable command: ${s.stepper_command.value}° relative`,
+          );
+        show("commands", commands.join("; ") || "No motor commands sent.");
+      } catch (error) {
+        show("result", `Sensor display unavailable: ${error.message}`);
+      }
+      // Include fetch/render time in the interval and keep one request in flight.
+      setTimeout(
+        refresh,
+        Math.max(0, REFRESH_MS - (performance.now() - started)),
+      );
+    }
+    refresh();
+  </script>
+</html>
