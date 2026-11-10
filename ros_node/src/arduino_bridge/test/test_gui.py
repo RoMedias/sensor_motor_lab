@@ -30,10 +30,37 @@ def test_mode_enable_and_physical_button_gate_motor_commands(gui):
     client.post('/command', json={'command': 'ENABLE', 'value': '1'})
     assert client.post('/command', json=command).json['sent'] == 'DC_MOVE,45'
     node.receive_data(String(data='ENABLE,0'))
+    assert client.get('/state').json['enabled'] is False
     assert client.post('/command', json=command).status_code == 400
+    node.receive_data(String(data='ENABLE,1'))
+    assert client.get('/state').json['enabled'] is True
+    assert client.post('/command', json=command).status_code == 200
     client.post('/command', json={'command': 'ENABLE', 'value': '1'})
     client.post('/command', json={'command': 'MODE', 'value': 'SENSOR'})
     assert client.post('/command', json=command).status_code == 400
+
+
+def test_dc_reset_is_gated_and_publishes_stop_reset_command(gui):
+    node, client = gui
+    reset = {'command': 'DC_RESET', 'value': '0'}
+    assert client.post('/command', json=reset).status_code == 400
+    client.post('/command', json={'command': 'MODE', 'value': 'GUI'})
+    client.post('/command', json={'command': 'ENABLE', 'value': '1'})
+    assert client.post('/command', json=reset).json['sent'] == 'DC_RESET,0'
+    assert node.publisher.publish.call_args.args[0].data == 'DC_RESET,0'
+    assert client.get('/state').json['dc_command'] == {
+        'command': 'DC_RESET', 'value': 0}
+    node.publisher.publish.reset_mock()
+    assert client.post('/command', json={
+        'command': 'DC_RESET', 'value': '1'}).status_code == 400
+    node.receive_data(String(data='ENABLE,0'))
+    assert client.post('/command', json=reset).status_code == 400
+    node.publisher.publish.assert_not_called()
+    client.post('/command', json={'command': 'ENABLE', 'value': '1'})
+    client.post('/command', json={'command': 'MODE', 'value': 'SENSOR'})
+    node.publisher.publish.reset_mock()
+    assert client.post('/command', json=reset).status_code == 400
+    node.publisher.publish.assert_not_called()
 
 
 @pytest.mark.parametrize('requested,rounded', [

@@ -16,9 +16,11 @@ const float STEPPER_MIN_TARGET_DEG = NAN;
 const float STEPPER_MAX_TARGET_DEG = NAN;
 const int8_t SLOT_BLOCKED_SIGN = 0;  // Confirm +1 or -1.
 
+const uint32_t SENSOR_PERIOD_MS = 10;  // 100 Hz sampling and telemetry target.
+
 ControlMode controlMode = ControlMode::GUI;
 bool systemEnabled = false;
-bool buttonEnableChanged = false;
+bool enableStatePending = true;
 bool sensorsReady = false;
 PotReading pot;
 FlexReading flex;
@@ -55,6 +57,7 @@ void setControlMode(ControlMode mode) {
 
 void setSystemEnabled(bool enabled) {
     systemEnabled = enabled;
+    enableStatePending = true;
     if (!enabled) {
         dcStop();
         stepperStop();
@@ -112,6 +115,8 @@ void parseCommand(char* message) {
         set_servo_angle(value);
     else if (strcmp(command, "STEPPER_MOVE") == 0)
         stepperMoveRelative(value);
+    else if (strcmp(command, "DC_RESET") == 0 && value == 0.0f)
+        dcStop();  // Existing stop also cancels motion and resets the DC PID.
 }
 
 void readSerialCommands() {
@@ -140,15 +145,23 @@ void readSerialCommands() {
 void sendSensorData() {
     // Each record fits the Uno's 63-byte TX space; never wait for it to drain.
     if (Serial.availableForWrite() < 63) return;
-    if (buttonEnableChanged) {
+    static uint32_t lastEnableSent = 0;
+    if (enableStatePending || millis() - lastEnableSent >= 1000) {
         Serial.print(F("ENABLE,"));
         Serial.println(systemEnabled ? 1 : 0);
-        buttonEnableChanged = false;
+        enableStatePending = false;
+        lastEnableSent = millis();
         return;
     }
     static uint32_t lastSent = 0;
     static uint8_t field = 0;
-    if (!sensorsReady || millis() - lastSent < 100) return;
+    if (!sensorsReady) return;
+    // Time between cycle starts, so sending four records adds no extra period.
+    if (field == 0) {
+        uint32_t now = millis();
+        if (now - lastSent < SENSOR_PERIOD_MS) return;
+        lastSent = now;
+    }
     switch (field) {
         case 0:
             Serial.print(F("POT,"));
@@ -176,7 +189,6 @@ void sendSensorData() {
             break;
     }
     field = (field + 1) % 4;
-    if (field == 0) lastSent = millis();
 }
 
 void setup() {
@@ -196,11 +208,10 @@ void loop() {
     readSerialCommands();
     if (buttonUpdate()) {
         setSystemEnabled(!systemEnabled);
-        buttonEnableChanged = true;
     }
     slot = slotRead();  // Count transitions even while disabled.
     static uint32_t lastRead = 0;
-    if (!sensorsReady || millis() - lastRead >= 50) {
+    if (!sensorsReady || millis() - lastRead >= SENSOR_PERIOD_MS) {
         lastRead = millis();
         pot = potRead();
         flex = flexRead();

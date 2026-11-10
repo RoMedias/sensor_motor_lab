@@ -4,7 +4,7 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 
-PORT = '/dev/pts/5'  # Change to your Arduino's port.
+PORT = '/dev/ttyACM0'  # Change to your Arduino's port.
 BAUD = 115200
 
 

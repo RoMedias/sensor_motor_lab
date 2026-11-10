@@ -8,8 +8,9 @@
 #include <AccelStepper.h>
 #include "function_sigs.h"
 
-static const uint8_t STEPPER_STEP_PIN = 11;
-static const uint8_t STEPPER_DIR_PIN = 12;
+// Pin assignments from PINOUT.md.
+static const uint8_t STEPPER_STEP_PIN = 6;
+static const uint8_t STEPPER_DIR_PIN = 7;
 
 // MOTOR SETTINGS
 // full step / microsteps

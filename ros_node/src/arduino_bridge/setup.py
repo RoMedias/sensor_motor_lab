@@ -16,6 +16,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         ('lib/' + package_name + '/templates', ['scripts/templates/index.html']),
+        ('lib/' + package_name + '/static', ['scripts/static/dashboard.css']),
     ],
     install_requires=['setuptools', 'pyserial', 'Flask'],
     zip_safe=True,

@@ -5,7 +5,7 @@ newline-delimited strings on `/arduino/command` and `/arduino/data` using
 `std_msgs/String`. Sensor-to-motor mapping runs on the Arduino.
 All runnable Python files are in `ros_node/src/arduino_bridge/scripts/`:
 `arduino_bridge.py`, `flask_gui.py`, and `fake_arduino.py`. The GUI template is
-in `scripts/templates/index.html`.
+in `scripts/templates/index.html`, with styling in `scripts/static/dashboard.css`.
 
 ## Run the ROS bridge and GUI
 
@@ -34,18 +34,27 @@ restart the GUI with `--step-degrees VALUE`, replacing VALUE with the confirmed
 degrees per driver pulse, including microstepping and gearing. It must match
 Bill's rounding calculation. The GUI rounds half steps away from zero and sends
 the achievable relative angle. Without this setting only stepper input is disabled.
+**Reset DC motor** calls the existing `dcStop()` function: it stops the DC motor,
+cancels its current command, and resets PID state. It does not zero the encoder.
+Reset uses the same enabled GUI mode requirement as the other motor commands.
 
 The GUI displays pot degrees and raw ADC, flex bend degrees and raw/filtered ADC,
 TOF millimeters (`-1` means unavailable), and slot state/interruption count.
 Each sensor has a live graph covering the last 60 seconds: pot angle, flex raw
 and filtered ADC on the same graph, TOF distance, and slot interruption count.
-Graphs sample the current readings every 50 ms (20 Hz); invalid TOF values leave gaps.
+Graphs request the current readings every 10 ms (100 Hz target); invalid TOF
+values leave gaps. Actual refresh rate depends on browser and request latency.
+The fake Arduino and real Uno telemetry both target 100 Hz. The real TOF sensor
+keeps its 50 ms measurement timing (about 20 Hz); intervening packets repeat its
+latest available reading.
 Plot history stays in the browser and clears when the page reloads.
 Raw potentiometer values remain available on `/arduino/data` for calibration plots.
 The last GUI commands are requests, not measured motor positions or completion
 reports. Servo limits are enforced by the servo module, so a requested angle can
-be clamped there. Mode/enable selections are locally tracked; physical-button
-`ENABLE` messages update the enable display. Use this GUI as the sole PC command
+be clamped there. Mode is locally tracked; GUI enable requests update the display,
+and Arduino `ENABLE` reports synchronize it at startup, after enable changes, and
+once per second. A green/red status indicator and outlined enable/disable button
+reflect the enable state, including physical-button presses. Use this GUI as the sole PC command
 source. Restart the GUI after resetting the Uno, and select mode/enable again.
 
 ## Test sensors without hardware (Linux / WSL)
@@ -92,7 +101,7 @@ promptly; TOF reads must return the latest measurement or `-1`, without waiting
 for a new conversion. `buttonUpdate()` must debounce and return true once per
 press. `dcStop()` must cancel moves/reset PID; `stepperStop()` must cancel motion.
 
-Sensor mode applies the following every 50 ms:
+Sensor mode applies the following every 10 ms:
 
 | Input | Motor command |
 |---|---|
@@ -109,8 +118,12 @@ The stepper module must treat repeated absolute targets as the same target and
 round relative commands to achievable steps. GUI DC position commands remain
 relative; TOF never commands DC position.
 
-Sensor data is sent approximately every 100 ms, one record at a time only when
-the Uno's transmit buffer has room. Slot transitions and button presses are
+Sensor sampling and telemetry cycles target 100 Hz (every 10 ms) at 115200 baud.
+The four sensor records are sent one at a time only when the Uno's transmit
+buffer has room. A cycle is timed from its start, and delayed cycles are not
+replayed in a burst. Actual rates depend on loop timing and serial capacity.
+TOF measurement timing remains 50 ms; telemetry repeats the latest reading
+between measurements. Slot transitions and button presses are
 polled every loop. Serial parsing uses an 80-byte buffer, discards oversized lines
 through newline, and limits work per loop. No motor telemetry or ACKs are sent.
 
@@ -118,8 +131,9 @@ through newline, and limits work per loop. No motor telemetry or ACKs are sent.
 |---|---|
 | PC → Uno | `DC_MOVE,45`, `DC_VEL,-30`, `SERVO,90`, `STEPPER_MOVE,-45` |
 | PC → Uno | `MODE,GUI`, `MODE,SENSOR`, `ENABLE,1`, `ENABLE,0` |
+| PC → Uno | `DC_RESET,0` (stop DC motor, cancel motion, and reset PID) |
 | Uno → PC | `POT,512,90`, `FLEX,620,605,35`, `TOF_MM,250`, `SLOT,1,12` |
-| Uno → PC | `ENABLE,0` or `ENABLE,1` after a physical-button change |
+| Uno → PC | `ENABLE,0` or `ENABLE,1` at startup, after enable changes, and once per second |
 
 ## Remaining lab evidence
 

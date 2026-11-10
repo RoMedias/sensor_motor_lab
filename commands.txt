@@ -1,0 +1,4 @@
+ros2 run arduino_bridge arduino_bridge
+ros2 run arduino_bridge flask_gui --step-degrees 1
+python fake_arduino.py 
+ros2 topic echo /arduino/data

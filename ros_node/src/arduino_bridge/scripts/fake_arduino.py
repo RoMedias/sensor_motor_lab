@@ -50,6 +50,7 @@ def main():
     samples = sensor_samples()
     buffer = b''
     enabled = False
+    next_enable_report = time.monotonic()
     next_sample = time.monotonic()
     inputs = [master]
     if sys.stdin.isatty():
@@ -67,6 +68,7 @@ def main():
                         print(f'PC -> Uno: {command}', flush=True)
                     if command in ('ENABLE,0', 'ENABLE,1'):
                         enabled = command == 'ENABLE,1'
+                        next_enable_report = 0
             if sys.stdin in ready:
                 key = sys.stdin.readline().strip().lower()
                 if key == 'q':
@@ -83,6 +85,12 @@ def main():
                 except BlockingIOError:
                     pass  # Skip this sample if nobody is draining the port.
                 next_sample = time.monotonic() + 0.01
+            if time.monotonic() >= next_enable_report:
+                try:
+                    os.write(master, f'ENABLE,{int(enabled)}\n'.encode())
+                except BlockingIOError:
+                    pass
+                next_enable_report = time.monotonic() + 1
     except KeyboardInterrupt:
         pass
     finally:

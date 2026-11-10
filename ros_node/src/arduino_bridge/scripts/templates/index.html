@@ -1,198 +1,102 @@
 <!doctype html>
 <html lang="en">
+<head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Sensor and motor lab</title>
-  <style>
-    body {
-      font: 16px system-ui;
-      max-width: 850px;
-      margin: 2rem auto;
-      padding: 0 1rem;
-    }
-    fieldset {
-      margin: 1rem 0;
-    }
-    button,
-    input,
-    select {
-      font: inherit;
-      padding: 0.4rem;
-      margin: 0.2rem;
-    }
-    th,
-    td {
-      text-align: left;
-      padding: 0.5rem;
-      border-bottom: 1px solid #ccc;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    output {
-      display: block;
-      min-height: 1.5rem;
-    }
-    .plots {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 1rem;
-    }
-    figure {
-      margin: 0;
-      padding: 0.75rem;
-      border: 1px solid #ccc;
-      border-radius: 0.3rem;
-    }
-    figcaption {
-      font-weight: bold;
-    }
-    canvas {
-      display: block;
-      width: 100%;
-      height: 220px;
-    }
-    .legend {
-      font-size: 0.85rem;
-    }
-    .raw {
-      color: #b45309;
-    }
-    .filtered {
-      color: #1d4ed8;
-    }
-    @media (max-width: 650px) {
-      .plots {
-        grid-template-columns: 1fr;
-      }
-    }
-  </style>
-  <h1>Sensor and motor lab</h1>
-  <fieldset>
-    <legend>System</legend>
-    <label
-      >Mode
-      <select id="mode">
-        <option>GUI</option>
-        <option>SENSOR</option>
-      </select></label
-    >
-    <button onclick="send('MODE', document.querySelector('#mode').value)">
-      Set mode
-    </button>
-    <button onclick="send('ENABLE', '1')">Enable motors</button>
-    <button onclick="send('ENABLE', '0')">Disable motors</button>
-    <p id="system">
-      Select a mode and enable state before sending motor commands.
-    </p>
-  </fieldset>
-  <fieldset id="motors" disabled>
-    <legend>GUI motor commands</legend>
-    <form data-command="DC_MOVE">
-      <label
-        >DC relative degrees
-        <input name="value" type="number" step="any" required /></label
-      ><button>Move</button>
-    </form>
-    <form data-command="DC_VEL">
-      <label
-        >DC signed RPM
-        <input name="value" type="number" step="any" required /></label
-      ><button>Set velocity</button>
-    </form>
-    <form data-command="SERVO">
-      <label
-        >Servo absolute degrees
-        <input name="value" type="number" step="any" required /></label
-      ><button>Set angle</button>
-    </form>
-    <form data-command="STEPPER_MOVE">
-      <label
-        >Stepper relative degrees
-        <input name="value" type="number" step="any" required /></label
-      ><button>Move</button>
-    </form>
-    <p id="step-size"></p>
-  </fieldset>
-  <output id="result" role="status"></output>
-  <h2>Sensors</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Sensor</th>
-        <th>Reading</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>Potentiometer</td>
-        <td id="pot">Waiting</td>
-      </tr>
-      <tr>
-        <td>Flex</td>
-        <td id="flex">Waiting</td>
-      </tr>
-      <tr>
-        <td>TOF</td>
-        <td id="tof">Waiting</td>
-      </tr>
-      <tr>
-        <td>Slot</td>
-        <td id="slot">Waiting</td>
-      </tr>
-    </tbody>
-  </table>
-  <p>
-    Live graphs: last 60 seconds, sampled by the GUI every 50 ms (20 Hz).
-    Invalid TOF readings leave gaps.
-  </p>
-  <div class="plots">
-    <figure>
-      <figcaption>Potentiometer — angle (°)</figcaption>
-      <canvas
-        id="pot-plot"
-        role="img"
-        aria-label="Potentiometer angle in degrees over time"
-      ></canvas>
-    </figure>
-    <figure>
-      <figcaption>Flex — ADC counts</figcaption>
-      <div class="legend">
-        <span class="raw">Raw</span> · <span class="filtered">Filtered</span>
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}" />
+</head>
+<body>
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">Lab dashboard</p>
+      <h1>Sensor &amp; motor control</h1>
+      <p class="subtitle">Control the motors and watch your sensor readings.</p>
+    </div>
+    <span class="badge">100 Hz target · 60 s history</span>
+  </header>
+
+  <main class="dashboard">
+    <aside class="controls" aria-label="Motor controls">
+      <fieldset class="panel">
+        <legend>System control</legend>
+        <p id="enable-status" class="enable-status" data-state="unknown" role="status" aria-live="polite">Motor control: unknown</p>
+        <label for="mode">Control mode</label>
+        <div class="mode-row">
+          <select id="mode"><option>GUI</option><option>SENSOR</option></select>
+          <button type="button" onclick="send('MODE', document.querySelector('#mode').value)">Set mode</button>
+        </div>
+        <div class="button-row">
+          <button id="enable-button" type="button" class="enable-button" aria-pressed="false" onclick="send('ENABLE', '1')">Enable motors</button>
+          <button id="disable-button" type="button" class="disable-button" aria-pressed="false" onclick="send('ENABLE', '0')">Disable motors</button>
+        </div>
+        <p id="system" class="system-status">Select a mode and enable state before sending motor commands.</p>
+      </fieldset>
+
+      <fieldset id="motors" class="panel" disabled>
+        <legend>Motor commands</legend>
+        <form data-command="DC_MOVE">
+          <label for="dc-move">DC relative angle <span>degrees</span></label>
+          <div class="input-row"><input id="dc-move" name="value" type="number" step="any" placeholder="45" required /><button>Move</button></div>
+        </form>
+        <form data-command="DC_VEL">
+          <label for="dc-velocity">DC signed velocity <span>RPM</span></label>
+          <div class="input-row"><input id="dc-velocity" name="value" type="number" step="any" placeholder="-30" required /><button>Set speed</button></div>
+        </form>
+        <button type="button" class="dc-reset" onclick="send('DC_RESET', '0')">Reset DC motor</button>
+        <p class="hint">Stops the DC motor, cancels its current command, and resets its PID state.</p>
+        <form data-command="SERVO">
+          <label for="servo-angle">Servo absolute angle <span>degrees</span></label>
+          <div class="input-row"><input id="servo-angle" name="value" type="number" step="any" placeholder="90" required /><button>Set angle</button></div>
+        </form>
+        <form data-command="STEPPER_MOVE">
+          <label for="stepper-move">Stepper relative angle <span>degrees</span></label>
+          <div class="input-row"><input id="stepper-move" name="value" type="number" step="any" placeholder="-45" required /><button>Move</button></div>
+        </form>
+        <p id="step-size" class="hint"></p>
+      </fieldset>
+
+      <section class="panel command-panel" aria-labelledby="command-title">
+        <h2 id="command-title">Last GUI commands</h2>
+        <p id="commands">No motor commands sent.</p>
+        <p class="hint">Requested commands. In SENSOR mode, the Arduino controls the motors from sensor readings.</p>
+      </section>
+      <output id="result" role="status" class="feedback"></output>
+    </aside>
+
+    <section class="sensor-section" aria-labelledby="sensor-title">
+      <div class="section-heading">
+        <div><h2 id="sensor-title">Sensor readings</h2><p class="subtitle">Live values and recent trends</p></div>
       </div>
-      <canvas
-        id="flex-plot"
-        role="img"
-        aria-label="Raw and filtered flex ADC counts over time"
-      ></canvas>
-    </figure>
-    <figure>
-      <figcaption>TOF — distance (mm)</figcaption>
-      <canvas
-        id="tof-plot"
-        role="img"
-        aria-label="TOF distance in millimeters over time"
-      ></canvas>
-    </figure>
-    <figure>
-      <figcaption>Slot — interruption count</figcaption>
-      <canvas
-        id="slot-plot"
-        role="img"
-        aria-label="Slot interruption count over time"
-      ></canvas>
-    </figure>
-  </div>
-  <h2>Last GUI commands</h2>
-  <p>
-    These are requested commands. In SENSOR mode the Arduino controls the motors
-    from sensor readings.
-  </p>
-  <p id="commands">No motor commands sent.</p>
+      <div class="plots">
+        <figure class="chart-card">
+          <figcaption><span>Potentiometer</span><span class="unit">Degrees</span></figcaption>
+          <p id="pot" class="reading">Waiting for readings</p>
+          <canvas id="pot-plot" role="img" aria-label="Potentiometer angle in degrees over time"></canvas>
+        </figure>
+        <figure class="chart-card">
+          <figcaption><span>Flex sensor</span><span class="unit">ADC counts</span></figcaption>
+          <p id="flex" class="reading">Waiting for readings</p>
+          <div class="legend"><span class="raw">Raw</span><span class="filtered">Filtered</span></div>
+          <canvas id="flex-plot" role="img" aria-label="Raw and filtered flex ADC counts over time"></canvas>
+        </figure>
+        <figure class="chart-card">
+          <figcaption><span>TOF distance</span><span class="unit">Millimeters</span></figcaption>
+          <p id="tof" class="reading">Waiting for readings</p>
+          <canvas id="tof-plot" role="img" aria-label="TOF distance in millimeters over time"></canvas>
+          <p class="hint">Invalid readings leave gaps in the graph.</p>
+        </figure>
+        <figure class="chart-card">
+          <figcaption><span>Slot sensor</span><span class="unit">Interruptions</span></figcaption>
+          <p id="slot" class="reading">Waiting for readings</p>
+          <canvas id="slot-plot" role="img" aria-label="Slot interruption count over time"></canvas>
+        </figure>
+      </div>
+    </section>
+  </main>
   <script>
     const show = (id, text) => (document.getElementById(id).textContent = text);
-    const REFRESH_MS = 50;
+    const REFRESH_MS = 10;
     const samples = [];
     const plots = [
       { id: "pot-plot", lines: [["pot", "#1d4ed8"]] },
@@ -212,8 +116,7 @@
       while (samples.length && samples[0].time < now - 60) samples.shift();
       plots.forEach((plot) => {
         const canvas = document.getElementById(plot.id);
-        const width = canvas.getBoundingClientRect().width;
-        const height = 220;
+        const { width, height } = canvas.getBoundingClientRect();
         const scale = window.devicePixelRatio || 1;
         const pixelWidth = Math.round(width * scale),
           pixelHeight = Math.round(height * scale);
@@ -224,10 +127,10 @@
         const ctx = canvas.getContext("2d");
         ctx.setTransform(scale, 0, 0, scale, 0, 0);
         ctx.clearRect(0, 0, width, height);
-        const left = 58,
+        const left = 64,
           top = 16,
           right = width - 12,
-          bottom = height - 38;
+          bottom = height - 42;
         const values = [];
         samples.forEach((sample) =>
           plot.lines.forEach(([key]) => {
@@ -246,7 +149,8 @@
         const x = (time) => left + ((time - now + 60) / 60) * (right - left);
         const y = (value) =>
           bottom - ((value - min) / (max - min)) * (bottom - top);
-        ctx.font = "11px system-ui";
+        ctx.font = "13px system-ui";
+        ctx.lineWidth = 1;
         for (let tick = 0; tick <= 4; tick++) {
           const py = top + (tick / 4) * (bottom - top);
           const value = max - (tick / 4) * (max - min);
@@ -328,9 +232,16 @@
       try {
         const response = await fetch("/state");
         const s = await response.json();
+        const enableState = s.enabled === true ? "enabled" : s.enabled === false ? "disabled" : "unknown";
+        const enableStatus = document.getElementById("enable-status");
+        const enableText = `Motor control: ${enableState}`;
+        if (enableStatus.textContent !== enableText) enableStatus.textContent = enableText;
+        enableStatus.dataset.state = enableState;
+        document.getElementById("enable-button").setAttribute("aria-pressed", String(s.enabled === true));
+        document.getElementById("disable-button").setAttribute("aria-pressed", String(s.enabled === false));
         show(
           "system",
-          `Requested mode: ${s.mode === null ? "unknown" : s.mode}; enable: ${s.enabled === null ? "unknown" : s.enabled ? "enabled" : "disabled"} (also updated by physical button)`,
+          `Requested mode: ${s.mode === null ? "unknown" : s.mode}. The physical button toggles motor control.`,
         );
         document.getElementById("motors").disabled =
           s.mode !== "GUI" || s.enabled !== true;
@@ -374,7 +285,9 @@
         const commands = [];
         if (s.dc_command)
           commands.push(
-            `${s.dc_command.command}: ${s.dc_command.value} ${s.dc_command.command === "DC_VEL" ? "RPM" : "relative degrees"}`,
+            s.dc_command.command === "DC_RESET"
+              ? "DC motor stop / PID reset requested"
+              : `${s.dc_command.command}: ${s.dc_command.value} ${s.dc_command.command === "DC_VEL" ? "RPM" : "relative degrees"}`,
           );
         if (s.servo_command)
           commands.push(`Servo requested: ${s.servo_command.value}°`);
@@ -394,4 +307,5 @@
     }
     refresh();
   </script>
+</body>
 </html>

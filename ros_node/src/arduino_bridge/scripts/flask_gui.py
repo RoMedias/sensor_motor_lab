@@ -73,10 +73,13 @@ class MotorGui(Node):
                 if argument not in ('0', '1'):
                     raise ValueError('Enable must be 0 or 1.')
                 key, value = 'enabled', argument == '1'
-            elif command in ('DC_MOVE', 'DC_VEL', 'SERVO', 'STEPPER_MOVE'):
+            elif command in ('DC_MOVE', 'DC_VEL', 'SERVO', 'STEPPER_MOVE',
+                             'DC_RESET'):
                 if self.state['mode'] != 'GUI' or self.state['enabled'] is not True:
                     raise ValueError('Select GUI mode and enable motors first.')
                 value = number(argument)
+                if command == 'DC_RESET' and value != 0:
+                    raise ValueError('DC reset value must be 0.')
                 if command == 'STEPPER_MOVE':
                     if self.step_degrees is None:
                         raise ValueError('Start the GUI with confirmed --step-degrees.')
@@ -85,7 +88,8 @@ class MotorGui(Node):
                 argument = format(value, '.9g')
                 key = {'DC_MOVE': 'dc_command', 'DC_VEL': 'dc_command',
                        'SERVO': 'servo_command',
-                       'STEPPER_MOVE': 'stepper_command'}[command]
+                       'STEPPER_MOVE': 'stepper_command',
+                       'DC_RESET': 'dc_command'}[command]
                 value = {'command': command, 'value': value}
             else:
                 raise ValueError('Unknown command.')
