@@ -10,10 +10,10 @@ const float TOF_NEAR_MM = NAN;
 const float TOF_FAR_MM = NAN;
 const float TOF_NEAR_RPM = NAN;
 const float TOF_FAR_RPM = NAN;
-const float FLEX_MIN_BEND_DEG = NAN;
-const float FLEX_MAX_BEND_DEG = NAN;
-const float STEPPER_MIN_TARGET_DEG = NAN;
-const float STEPPER_MAX_TARGET_DEG = NAN;
+const float FLEX_MIN_BEND_DEG = 0.0f; // flat
+const float FLEX_MAX_BEND_DEG = 90.0f; // fully bent
+const float STEPPER_MIN_TARGET_DEG = 0.0f; 
+const float STEPPER_MAX_TARGET_DEG = 180.0f;
 const int8_t SLOT_BLOCKED_SIGN = 0;  // Confirm +1 or -1.
 
 const uint32_t SENSOR_PERIOD_MS = 10;  // 100 Hz sampling and telemetry target.
