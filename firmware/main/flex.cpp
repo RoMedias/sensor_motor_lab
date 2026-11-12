@@ -1,7 +1,6 @@
-// Hardware: Adafruit Long Flex Sensor (~10k flat, ~20k bent) in a divider
-//   5V -- flex -- FLEX_PIN -- 10k -- GND
-//   flat: 5 * 10k/(10k+10k) = 2.50 V -> ADC 512
-//   bent: 5 * 10k/(20k+10k) = 1.67 V -> ADC 341
+// Hardware: flex sensor between A1 and GND, with no external resistor.
+//   5V -- internal pull-up -- FLEX_PIN -- flex -- GND
+//   ADC increases as flex resistance increases. Calibrate this actual wiring.
 
 #include <Arduino.h>
 #include "function_sigs.h"
@@ -18,14 +17,13 @@ static const float FLEX_ALPHA = 0.2f;
 // ms -> 100 Hz, so filter timing doesn't depend on how fast loop() runs
 static const uint16_t FLEX_SAMPLE_PERIOD = 10;    
                                                   
-// CALIBRATION (TO DO IN PERSON)
-// ADC counts (ASCENDING) -> bend angle in degrees, piecewise-linear
-// Currently nominal datasheet values
-// Replace with own protractor measurements (same data as the transfer-function plot)
-// More points handle the sensor's nonlinearity better
+// Two-point calibration, 2026-11-11, for A1-to-GND wiring with INPUT_PULLUP.
+// Median filtered ADC from 95 GUI readings at each held angle: flat and 90 deg.
+// ADC counts (ASCENDING) -> bend angle in degrees, piecewise-linear.
+// Recalibrate if wiring changes; more measured angles can capture nonlinearity.
 static const uint8_t FLEX_CAL_N = 2;
-static const float FLEX_CAL_ADC[FLEX_CAL_N] = { 341.0f, 512.0f };
-static const float FLEX_CAL_DEG[FLEX_CAL_N] = {  90.0f,   0.0f };
+static const float FLEX_CAL_ADC[FLEX_CAL_N] = { 296.0f, 583.88f };
+static const float FLEX_CAL_DEG[FLEX_CAL_N] = {   0.0f,  90.0f };
 
 // FILTER STATE
 static uint16_t flexBuf[FLEX_MEDIAN_N];
@@ -72,7 +70,7 @@ static float flexAdcToDeg(float adc) {
 }
 
 void flexBegin() {
-    pinMode(FLEX_PIN, INPUT);
+    pinMode(FLEX_PIN, INPUT_PULLUP);
     flexBufCount = 0;
     flexBufIdx = 0;
     flexEmaInit = false;

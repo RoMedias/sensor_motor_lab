@@ -4,19 +4,19 @@
 #include <math.h>
 #include "lab_modules.h"
 
-// Fill these from measured calibration and agreed motor limits.
-// NAN / 0 leave the corresponding mapping unavailable.
-const float TOF_NEAR_MM = NAN;
-const float TOF_FAR_MM = NAN;
-const float TOF_NEAR_RPM = NAN;
-const float TOF_FAR_RPM = NAN;
+// Observed near/far hand positions: 95 readings each, 2026-11-11.
+// Use the measured envelope so noise at either endpoint stays inside the range.
+const float TOF_NEAR_MM = 9.0f;
+const float TOF_FAR_MM = 345.0f;
+// Near = stopped, far = full power; outside this range = stopped.
 const float FLEX_MIN_BEND_DEG = 0.0f; // flat
 const float FLEX_MAX_BEND_DEG = 90.0f; // fully bent
 const float STEPPER_MIN_TARGET_DEG = 0.0f; 
 const float STEPPER_MAX_TARGET_DEG = 180.0f;
-const int8_t SLOT_BLOCKED_SIGN = 0;  // Confirm +1 or -1.
+const int8_t SLOT_BLOCKED_SIGN = 1;  // Blocked = positive; open = negative.
 
 const uint32_t SENSOR_PERIOD_MS = 10;  // 100 Hz sampling and telemetry target.
+const bool DC_ENCODER_CALIBRATION = false;  // Temporary ENC,count,A,B,edges; disabled after calibration.
 
 ControlMode controlMode = ControlMode::GUI;
 bool systemEnabled = false;
@@ -36,11 +36,11 @@ float mapClamped(float value, float inMin, float inMax,
     return outMin + (value - inMin) * (outMax - outMin) / (inMax - inMin);
 }
 
-float distanceToRpm(int16_t distance_mm) {
-    if (distance_mm < 0 || TOF_NEAR_RPM < 0 || TOF_FAR_RPM < 0)
+float distanceToDuty(int16_t distance_mm) {
+    if (distance_mm < 0 || distance_mm < TOF_NEAR_MM || distance_mm > TOF_FAR_MM)
         return NAN;
     return mapClamped(distance_mm, TOF_NEAR_MM, TOF_FAR_MM,
-                      TOF_NEAR_RPM, TOF_FAR_RPM);
+                      0.0f, 1.0f);
 }
 
 float bendToStepperDegrees(float bend_deg) {
@@ -75,11 +75,11 @@ void applySensorControl() {
         stepperSetPosition(stepperTarget);  // Absolute target, never a relative move.
     else
         stepperStop();
-    float rpm = distanceToRpm(distanceMm);
-    if (!isfinite(rpm) || (SLOT_BLOCKED_SIGN != 1 && SLOT_BLOCKED_SIGN != -1))
+    float duty = distanceToDuty(distanceMm);
+    if (!isfinite(duty) || (SLOT_BLOCKED_SIGN != 1 && SLOT_BLOCKED_SIGN != -1))
         dcStop();
     else
-        dcSetVelocity(rpm * (slot.blocked ? SLOT_BLOCKED_SIGN : -SLOT_BLOCKED_SIGN));
+        dcSetDuty(duty * (slot.blocked ? SLOT_BLOCKED_SIGN : -SLOT_BLOCKED_SIGN));
 }
 
 void parseCommand(char* message) {
@@ -151,6 +151,17 @@ void sendSensorData() {
         Serial.println(systemEnabled ? 1 : 0);
         enableStatePending = false;
         lastEnableSent = millis();
+        return;
+    }
+    static uint32_t lastEncoderSent = 0;
+    if (DC_ENCODER_CALIBRATION && millis() - lastEncoderSent >= 100) {
+        Serial.print(F("ENC,"));
+        Serial.print(dcGetEncoderCount());
+        uint8_t ab = dcGetEncoderAB();
+        Serial.print(','); Serial.print(ab & 1);
+        Serial.print(','); Serial.print((ab >> 1) & 1);
+        Serial.print(','); Serial.println(dcGetEncoderEdges());
+        lastEncoderSent = millis();
         return;
     }
     static uint32_t lastSent = 0;

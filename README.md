@@ -107,13 +107,22 @@ Sensor mode applies the following every 10 ms:
 |---|---|
 | Pot raw ADC | `pot_to_servo_angle()` → servo absolute angle |
 | Calibrated flex bend | Clamped mapping → `stepperSetPosition()` absolute target |
-| TOF millimeters | Clamped mapping → DC continuous RPM magnitude |
+| TOF millimeters | 9–345 mm → 0–100% DC power; outside this range stops DC |
 | Slot blocked/open | Opposite DC velocity signs |
 | Debounced button | Enable/disable all motors |
 
-Fill in the TOF and flex mapping endpoints and slot direction sign at the top of
-`main.ino` after confirmation. They are deliberately unconfigured; missing values
-stop the affected motor in SENSOR mode. Invalid TOF also stops the DC motor.
+TOF endpoints use the observed near/far hand positions. Near is stopped and far
+is full PWM power, so SENSOR mode does not assume an unmeasured maximum RPM.
+Blocked slot means positive rotation; open means negative. Invalid or out-of-range
+TOF stops the DC motor. GUI velocity commands remain encoder PID in signed RPM.
+DC encoder feedback uses pin-change interrupts on A2/A3, with the same quadrature
+direction as the component test. Counts/output revolution is calibrated to 361.4
+from 3,614 encoder counts over 10 observed shaft turns on 2026-11-11. Temporary
+encoder telemetry is disabled after calibration. PID gains still need tuning on
+the actual motor.
+DC position and velocity control currently use P only. At a position target the
+L298 brakes instead of coasting; disabling motors releases the bridge outputs.
+Very low RPM may still stall without measured friction compensation.
 The stepper module must treat repeated absolute targets as the same target and
 round relative commands to achievable steps. GUI DC position commands remain
 relative; TOF never commands DC position.

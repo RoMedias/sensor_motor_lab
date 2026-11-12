@@ -36,8 +36,12 @@ int16_t tofReadMm();
 bool buttonUpdate();
 void dcMoveRelative(float delta_deg);
 void dcSetVelocity(float rpm);
+void dcSetDuty(float duty);  // SENSOR: signed power fraction, -1..1.
 void dcUpdate();
 void dcStop();
+long dcGetEncoderCount();  // Temporary calibration readout.
+uint8_t dcGetEncoderAB();
+uint32_t dcGetEncoderEdges();
 float pot_to_servo_angle(uint16_t raw_adc);
 void set_servo_angle(float angle_deg);
 void servoSetEnabled(bool enabled);

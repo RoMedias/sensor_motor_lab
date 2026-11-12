@@ -47,14 +47,22 @@ PotReading potRead();
 void dcMoveRelative(float delta_deg);
 
 // Runs continuously at signed RPM; 0 stops.
-// GUI: user input. SENSOR: TOF speed + slot direction.
+// GUI: user input in RPM.
 void dcSetVelocity(float rpm);
+
+// SENSOR: TOF maps to 0..1 power; slot sets sign. Zero stops.
+void dcSetDuty(float duty);
 
 // Nonblocking encoder/PID update; call every loop.
 void dcUpdate();
 
 // Stops output, cancels movement, resets PID.
 void dcStop();
+
+// Raw quadrature count for the temporary encoder calibration.
+long dcGetEncoderCount();
+uint8_t dcGetEncoderAB();
+uint32_t dcGetEncoderEdges();
 
 
 //
@@ -142,8 +150,8 @@ enum class ControlMode : uint8_t {
     SENSOR
 };
 
-// Maps valid TOF distance to bounded speed magnitude in RPM.
-float distanceToRpm(int16_t distance_mm);
+// Maps in-range TOF distance to 0..1 power; invalid/outside returns NAN.
+float distanceToDuty(int16_t distance_mm);
 
 // Maps flex bend angle to a stepper target in degrees.
 float bendToStepperDegrees(float bend_deg);
