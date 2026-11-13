@@ -163,3 +163,29 @@ Run the GUI integration tests in a sourced ROS environment:
 cd ros_node/src/arduino_bridge
 python3 -m pytest test/test_gui.py
 ```
+
+## Individual contributions
+
+| Member | Contributions |
+|---|---|
+| Aaryan | Potentiometer module, DC motor + encoder module and PID, component test sketch, `PINOUT.md`, pot transfer-function plot |
+| Aswarth | ROS 2 serial bridge, Flask GUI, fake Arduino, function signatures and `main.ino` integration, DC encoder rework and calibration, flex calibration |
+| Bill | Flex sensor and stepper modules, flex/stepper limits, initial ROS bridge and protocol spec |
+| Jihyun | Slot sensor and servo modules, wiring diagram, and electrical schematic |
+| Khushi | TOF sensor and button modules |
+
+Everyone contributed to hardware assembly and wiring.
+
+## Issues faced
+
+| Problem | Fix |
+|---|---|
+| Wiring was messy, and much of the work was troubleshooting connections | Tidied the wiring with an extra breadboard and organized it with tape. Checked each component on its own with `test_components/test_components.ino` and kept `PINOUT.md` matched to the actual wiring |
+| The DC motor was wired incorrectly, so the encoder returned no data | Rewired the motor and encoder, then confirmed the counts with the component test sketch |
+| Flex sensor readings were noisy | A 5-sample median filter followed by an EMA (alpha = 0.2) at 100 Hz, plus a two-point calibration taken from median readings at 0 and 90 deg |
+| The original DC code polled the encoder once per loop, which can miss edges when the loop is busy with serial and sensor work. Its direction sign was also opposite to the test sketch, and the CPR was a placeholder | Pin-change interrupt with 4x quadrature decoding, the sign matched to the test sketch, and CPR calibrated to 361.4 |
+| RPM measured over a 10 ms window was noisy because of count quantization | Encoder counts averaged over a 100 ms window before the EMA |
+| PID tuning was tedious with no good way to measure angles or partial rotations | CPR calibrated by counting 10 full output-shaft turns; control reduced to P-only, with the L298 braking at the position target |
+| Maximum DC RPM was never measured, so TOF could not map to an RPM | TOF maps to PWM duty (0-100%) instead of RPM |
+| The TOF sensor measures at about 20 Hz, while telemetry runs at 100 Hz | Telemetry repeats the latest TOF reading between measurements |
+| 100 Hz telemetry at 115200 baud could overrun the serial buffer | Each record is sent only when the Uno's transmit buffer has room, and delayed cycles are not replayed |
